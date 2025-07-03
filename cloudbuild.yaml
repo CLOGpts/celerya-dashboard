@@ -1,6 +1,5 @@
 steps:
   - name: 'gcr.io/cloud-builders/gsutil'
-    args: ['cp', 'index.html', 'gs://NOME_DEL_TUO_BUCKET']
-
+    args: ['cp', 'index.html', 'gs://celerya-dashboard']
 options:
   logging: CLOUD_LOGGING_ONLY
