@@ -1,18 +1,24 @@
+# Usa una base super-leggera con npm
+FROM node:18-alpine                 
 
-# Usa un'immagine di Node
-FROM node:18-alpine
+# 1) cartella di lavoro
+WORKDIR /app                        
 
-# Crea una cartella di lavoro
-WORKDIR /app
+# 2) copia package* e installa dipendenze
+COPY package*.json ./
+RUN npm ci                          # più veloce di “npm install”
 
-# Copia tutti i file dell'app (quelli creati da Google AI Studio)
+# 3) copia TUTTO il progetto
 COPY . .
 
-# Installa il server statico 'serve'
+# 4) **BUILD** statico → ./dist
+RUN npm run build                   # <-- vite build
+
+# 5) installa server statico minimale
 RUN npm install -g serve
 
-# Espone la porta 8080 per Cloud Run
+# 6) Cloud Run ascolta su 8080
 EXPOSE 8080
 
-# Comando di avvio: serve i file statici sulla porta 8080
-CMD ["serve", "-s", ".", "-l", "8080"]
+# 7) serviamo **solo** /dist
+CMD ["serve", "-s", "dist", "-l", "8080"]
