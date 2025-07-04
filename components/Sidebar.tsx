@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { DashboardIcon } from './icons/DashboardIcon';
 import { TableIcon } from './icons/TableIcon';
@@ -46,8 +45,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activePage, setActivePage }) => {
   return (
     <div className="w-64 bg-slate-800 text-white flex flex-col p-4">
       <div className="mb-8">
-        <h1 className="text-xl font-bold text-white">Celerya Spec-</h1>
-        <h1 className="text-xl font-bold text-white -mt-1">Extractor</h1>
+        <h1 className="text-2xl font-bold text-white tracking-tight">Celerya SYD</h1>
       </div>
       <nav>
         <ul>
