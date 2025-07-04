@@ -1,0 +1,8 @@
+{
+  "name": "Copy of Copy of Celerya dashboard (TEST)",
+  "description": "An application to automatically extract, normalize, and manage information from food product specification sheets according to a customizable standard.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "prompt": ""
+}
