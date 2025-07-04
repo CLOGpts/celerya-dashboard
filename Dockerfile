@@ -1,14 +1,18 @@
-# Dockerfile
-FROM node:18
 
+# Usa un'immagine di Node
+FROM node:18-alpine
+
+# Crea una cartella di lavoro
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm install
-
+# Copia tutti i file dell'app (quelli creati da Google AI Studio)
 COPY . .
 
-EXPOSE 5173
+# Installa il server statico 'serve'
+RUN npm install -g serve
 
-CMD [ "npm", "run", "dev" ]
+# Espone la porta 8080 per Cloud Run
+EXPOSE 8080
 
+# Comando di avvio: serve i file statici sulla porta 8080
+CMD ["serve", "-s", ".", "-l", "8080"]
