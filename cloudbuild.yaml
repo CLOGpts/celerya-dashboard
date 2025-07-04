@@ -1,4 +1,3 @@
-
 steps:
   - name: 'gcr.io/cloud-builders/gsutil'
     args: ['cp', 'index.html', 'gs://celerya-dashboard']
