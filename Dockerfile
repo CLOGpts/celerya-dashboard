@@ -1,24 +1,26 @@
-# Usa una base super-leggera con npm
-FROM node:18-alpine                 
+# Usa una immagine Node minimale
+FROM node:18-alpine
 
-# 1) cartella di lavoro
-WORKDIR /app                        
+# Cartella di lavoro all’interno del container
+WORKDIR /app
 
-# 2) copia package* e installa dipendenze
+# Copia prima solo package.json + package-lock.json (se presente)
 COPY package*.json ./
-RUN npm ci                          # più veloce di “npm install”
 
-# 3) copia TUTTO il progetto
+# Installa tutte le dipendenze (npm ci richiede il lockfile: usiamo npm install)
+RUN npm install
+
+# Copia il resto del progetto (sorgenti, vite.config, ecc.)
 COPY . .
 
-# 4) **BUILD** statico → ./dist
-RUN npm run build                   # <-- vite build
+# Compila i file statici con Vite (finiranno in /app/dist)
+RUN npm run build
 
-# 5) installa server statico minimale
+# Installa il server statico ‘serve’ usato in runtime
 RUN npm install -g serve
 
-# 6) Cloud Run ascolta su 8080
+# Cloud Run espone la 8080
 EXPOSE 8080
 
-# 7) serviamo **solo** /dist
-CMD ["serve", "-s", "dist", "-l", "8080"]
+# Avvia il server statico su /app/dist
+CMD ["npx", "serve", "-s", "dist", "-l", "8080"]
