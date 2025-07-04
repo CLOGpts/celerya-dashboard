@@ -1,0 +1,10 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/adept-presence-464522-s3/celerya-dashboard', '.']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/adept-presence-464522-s3/celerya-dashboard']
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args: ['run', 'deploy', 'celerya-dashboard', '--image', 'gcr.io/adept-presence-464522-s3/celerya-dashboard', '--platform', 'managed', '--region', 'europe-west1', '--allow-unauthenticated']
+
+images:
+  - gcr.io/adept-presence-464522-s3/celerya-dashboard
