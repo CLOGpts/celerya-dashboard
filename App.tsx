@@ -1,4 +1,5 @@
-
+import { useEffect } from "react";
+import { testFirestore } from "./src/testFirestore";
 import React from 'react';
 import { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
@@ -21,6 +22,10 @@ const App: React.FC = () => {
   const [resourceToView, setResourceToView] = useState<Product | null>(null);
   const [ddtToView, setDdtToView] = useState<AnalyzedTransportDocument | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  useEffect(() => {
+  testFirestore().catch(console.error);
+}, []);
+
 
   useEffect(() => {
     // --- Data Migration for existing users ---
