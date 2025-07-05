@@ -1,9 +1,18 @@
-// src/testFirestore.ts
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "./firebase";          // stesso livello del file firebase.ts
+import { collection, getDocs, addDoc } from "firebase/firestore";
+import { db } from "./firebase";
 
+/** legge e stampa tutti i documenti */
 export async function testFirestore() {
-  // prova a leggere la collection “demo” (puoi cambiarla più tardi)
-  const snap = await getDocs(collection(db, "demo"));
-  console.log("Docs letti:", snap.docs.length);
+  // scrivi un nuovo doc di prova
+  await addDoc(collection(db, "prodotti_demo"), {
+    nome: "Caffè",
+    prezzo: 3.5,
+    ts: Date.now(),
+  });
+
+  // leggi la raccolta
+  const snap = await getDocs(collection(db, "prodotti_demo"));
+  console.log("Docs letti:", snap.size);
+  snap.forEach((d) => console.log(d.id, d.data()));
 }
+
