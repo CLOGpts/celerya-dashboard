@@ -1,16 +1,17 @@
-// src/components/Sidebar.tsx
-import { loadCustomers, addCustomer, deleteCustomer, CustomerDoc } from "../src/db";
+// IMPORTAZIONI AGGIORNATE
+import { signOut } from 'firebase/auth';
+import { auth } from '../src/firebase';
+import { User } from 'firebase/auth';
+import { loadCustomers, addCustomer } from "../src/db";
 import React, { useEffect, useState } from "react";
-import { DashboardIcon }    from "./icons/DashboardIcon";
-import { TableIcon }        from "./icons/TableIcon";
-import { SettingsIcon }     from "./icons/SettingsIcon";
-import { ChangelogIcon }    from "./icons/ChangelogIcon";
-import { FactoryIcon }      from "./icons/FactoryIcon";
-import { ShieldAlertIcon }  from "./icons/ShieldAlertIcon";
+
+// Icone dalla libreria LUCIDE
+import { LayoutDashboard, ShieldAlert, Bot, Factory, Settings, ScrollText, LogOut } from 'lucide-react';
 
 interface SidebarProps {
   activePage: string;
   setActivePage: (page: string) => void;
+  user: User | null;
 }
 
 const NavItem: React.FC<{
@@ -25,85 +26,80 @@ const NavItem: React.FC<{
     }`}
     onClick={onClick}
   >
-    <span className="mr-4">{icon}</span>
+    <span className="mr-4 w-5 h-5">{icon}</span>
     {label}
   </li>
 );
 
-const Sidebar: React.FC<SidebarProps> = ({ activePage, setActivePage }) => {
-  /* ------------------------------------------------------------------ */
-  /* 1️⃣  Stato e fetch iniziale dei clienti (micro-step 1 D-1)          */
-  /* ------------------------------------------------------------------ */
+const Sidebar: React.FC<SidebarProps> = ({ activePage, setActivePage, user }) => {
   const [customers, setCustomers] = useState<CustomerDoc[]>([]);
   const [newCustomerName, setNewCustomerName] = useState("");
 
   useEffect(() => {
-    loadCustomers()
-      .then(setCustomers)
-      .catch(console.error);
-  }, []);
+    if (user) {
+      loadCustomers(user.uid)
+        .then(setCustomers)
+        .catch(console.error);
+    } else {
+      setCustomers([]);
+    }
+  }, [user]);
 
-  useEffect(() => {
-    // puro debug per verificare che arrivino i dati
-    console.log("Clienti caricati:", customers);
-  }, [customers]);
-  /* ------------------------------------------------------------------ */
   const handleAddCustomer = async (e: React.FormEvent) => {
-  e.preventDefault(); // Impedisce alla pagina di ricaricarsi quando si invia il form
-  if (!newCustomerName.trim()) return; // Non fa nulla se il nome è vuoto o contiene solo spazi
+    e.preventDefault();
+    if (!newCustomerName.trim() || !user) return;
+    try {
+      const newCustomer = await addCustomer(newCustomerName, user.uid);
+      setCustomers(prev => [...prev, newCustomer]);
+      setNewCustomerName("");
+    } catch (error) {
+      console.error("Errore nell'aggiungere il cliente:", error);
+    }
+  };
+  
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Errore durante il logout:", error);
+    }
+  };
 
-  try {
-    // Chiama la funzione dal nostro file db.ts per salvare su Firestore
-    const newCustomer = await addCustomer(newCustomerName);
-    
-    // Aggiorna la lista dei clienti all'istante, senza dover ricaricare la pagina
-    setCustomers([...customers, newCustomer]);
-    
-    // Pulisce il campo di testo dopo l'aggiunta
-    setNewCustomerName(""); 
-  } catch (error) {
-    console.error("Errore nell'aggiungere il cliente:", error);
-  }
-};
-
-
-  /*  Nav statico già esistente  */
   const navItems = [
-    { id: "Dashboard",       label: "Dashboard",        icon: <DashboardIcon /> },
-    { id: "Cruscotto Alert", label: "Cruscotto Alert",  icon: <ShieldAlertIcon /> },
-    { id: "SYD AGENT",       label: "SYD AGENT",        icon: <TableIcon /> },
-    { id: "Lista Fornitori", label: "Lista Fornitori",  icon: <FactoryIcon /> },
-    { id: "Impostazioni",    label: "Impostazioni",     icon: <SettingsIcon /> },
-    { id: "Changelog",       label: "Changelog",        icon: <ChangelogIcon /> },
+    { id: "Dashboard",       label: "Dashboard",        icon: <LayoutDashboard size={20} /> },
+    { id: "Cruscotto Alert", label: "Cruscotto Alert",  icon: <ShieldAlert size={20} /> },
+    { id: "SYD AGENT",       label: "SYD AGENT",        icon: <Bot size={20} /> },
+    { id: "Lista Fornitori", label: "Lista Fornitori",  icon: <Factory size={20} /> },
+    { id: "Impostazioni",    label: "Impostazioni",     icon: <Settings size={20} /> },
+    { id: "Changelog",       label: "Changelog",        icon: <ScrollText size={20} /> },
   ];
 
   return (
-    <div className="w-64 bg-slate-800 text-white flex flex-col p-4">
+    <div className="w-64 bg-slate-800 text-white flex flex-col p-4 h-full">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white tracking-tight">
           Celerya SYD
         </h1>
+        {user && <p className="text-xs text-lime-300 truncate mt-1" title={user.email || ''}>{user.email}</p>}
       </div>
 
-      {/* NAV PRINCIPALE */}
-      <nav>
+      <nav className="flex-1">
         <ul>
-          {/* Form per nuovo cliente */}
-<form onSubmit={handleAddCustomer} className="px-2 mt-4">
-  <input
-    type="text"
-    value={newCustomerName}
-    onChange={(e) => setNewCustomerName(e.target.value)}
-    placeholder="Nuovo cliente..."
-    className="w-full p-2 text-sm text-white bg-slate-700 rounded-md placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-lime-400"
-  />
-  <button
-    type="submit"
-    className="w-full mt-2 p-2 text-sm font-bold text-slate-900 bg-lime-400 rounded-md hover:bg-lime-500 transition-colors"
-  >
-    Aggiungi
-  </button>
-</form>
+          <form onSubmit={handleAddCustomer} className="px-2 mb-4">
+            <input
+              type="text"
+              value={newCustomerName}
+              onChange={(e) => setNewCustomerName(e.target.value)}
+              placeholder="Nuovo cliente..."
+              className="w-full p-2 text-sm text-white bg-slate-700 rounded-md placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-lime-400"
+            />
+            <button
+              type="submit"
+              className="w-full mt-2 p-2 text-sm font-bold text-slate-900 bg-lime-400 rounded-md hover:bg-lime-500 transition-colors"
+            >
+              Aggiungi
+            </button>
+          </form>
           {navItems.map((item) => (
             <NavItem
               key={item.id}
@@ -116,7 +112,17 @@ const Sidebar: React.FC<SidebarProps> = ({ activePage, setActivePage }) => {
         </ul>
       </nav>
 
-      {/* (⚠️ Prossimi micro-step: render dei clienti, aggiungi-elimina, ecc.) */}
+      {user && (
+        <div className="mt-auto pt-4 border-t border-slate-700">
+          <button
+            onClick={handleLogout}
+            className="flex items-center w-full p-3 rounded-lg text-red-400 hover:bg-red-500 hover:text-white transition-colors"
+          >
+            <span className="mr-4 w-5 h-5"><LogOut size={20} /></span>
+            <span className="font-semibold">Esci</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 };
