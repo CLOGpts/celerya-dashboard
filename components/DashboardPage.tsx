@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import type { Product, Alert, AnalyzedTransportDocument, Section, Customer, AllSuppliersData } from '../types';
@@ -320,7 +319,11 @@ const DashboardPage: React.FC = () => {
         if (!file || !selectedCustomer) return;
         setIsExtracting(true); setError(null); setExtractedData(null); setAlerts([]);
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            // =================================================================
+            // PRIMA CORREZIONE: Leggiamo la chiave dal sistema di Vite.
+            // =================================================================
+            const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+            
             const customSchema = getCustomSchema();
             const dynamicPrompt = generatePromptFromSchema(customSchema);
             const imagePart = { inlineData: { mimeType: file.type, data: await fileToBase64(file) } };
@@ -333,7 +336,7 @@ const DashboardPage: React.FC = () => {
             });
             
             let jsonStr = response.text.trim();
-            const match = jsonStr.match(/^```(\w*)?\s*\n?(.*?)\n?\s*```$/s);
+            const match = jsonStr.match(/^``````$/s);
             if (match && match[2]) jsonStr = match[2].trim();
             
             const parsedData = JSON.parse(jsonStr);
@@ -352,7 +355,11 @@ const DashboardPage: React.FC = () => {
         if (!transportFile || !selectedCustomer) return;
         setIsAnalyzingTransport(true); setTransportError(null); setTransportData(null);
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            // =================================================================
+            // SECONDA CORREZIONE: Applichiamo lo stesso fix anche qui.
+            // =================================================================
+            const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+
             const imagePart = { inlineData: { mimeType: transportFile.type, data: await fileToBase64(transportFile) } };
             const textPart = { text: transportPrompt };
 
@@ -363,7 +370,7 @@ const DashboardPage: React.FC = () => {
             });
             
             let jsonStr = response.text.trim();
-            const match = jsonStr.match(/^```(\w*)?\s*\n?(.*?)\n?\s*```$/s);
+            const match = jsonStr.match(/^``````$/s);
             if (match && match[2]) jsonStr = match[2].trim();
             
             const parsedData = JSON.parse(jsonStr);
