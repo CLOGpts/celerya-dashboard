@@ -1,12 +1,7 @@
-// 1. IMPORTAZIONI PULITE E FOCALIZZATE
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 
-// =================================================================================
-// CORREZIONE DEFINITIVA: 
-// Ho corretto tutti i percorsi per riflettere la posizione di App.tsx
-// nella cartella principale del progetto.
-// =================================================================================
+// Percorsi corretti, che puntano alle cartelle giuste
 import { auth } from './src/firebase';
 import { LoginPage } from './components/LoginPage';
 import Sidebar from './components/Sidebar';
@@ -17,8 +12,6 @@ import DataViewPage from './components/DataViewPage';
 import SuppliersListPage from './components/SuppliersListPage';
 import { SpinnerIcon } from './components/icons/SpinnerIcon';
 import type { Customer } from './types';
-
-// ==================================================================
 
 const App: React.FC = () => {
   const [activePage, setActivePage] = useState<string>('Dashboard');
@@ -42,11 +35,7 @@ const App: React.FC = () => {
   }
 
   if (!currentUser) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
-        <LoginPage />
-      </div>
-    );
+    return <LoginPage />;
   }
 
   return (
