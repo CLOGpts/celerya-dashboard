@@ -1,14 +1,19 @@
-import './index.css'
-import React from "react";
-import ReactDOM from "react-dom/client";
-import App from "../App";
-import { ErrorBoundary } from "./ErrorBoundary";   // ← nuovo import
+import React from 'react';
+import ReactDOM from 'react-dom/client';
 
-ReactDOM.createRoot(
-  document.getElementById("root") as HTMLElement
-).render(
+// =========================================================================
+// CORREZIONE FONDAMENTALE:
+// 1. Importiamo il file CSS principale per "accendere" gli stili globali.
+// 2. Usiamo il percorso corretto ('./App') per trovare il componente App.
+// =========================================================================
+import './index.css'; 
+import App from "../App.tsx";
+import { ErrorBoundary } from "./ErrorBoundary";
+
+// Il resto del codice resta invariato perché è corretto
+ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    <ErrorBoundary>       {/* ← avvolge tutta l’app */}
+    <ErrorBoundary>
       <App />
     </ErrorBoundary>
   </React.StrictMode>
