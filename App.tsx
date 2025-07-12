@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-
-// Percorsi corretti, che puntano alle cartelle giuste
 import { auth } from './src/firebase';
 import { LoginPage } from './components/LoginPage';
+import { RegistrationPage } from './components/RegistrationPage'; // <-- NUOVO IMPORT
 import Sidebar from './components/Sidebar';
 import { SettingsPage } from './components/SettingsPage';
 import DashboardPage from './components/DashboardPage';
@@ -17,6 +16,7 @@ const App: React.FC = () => {
   const [activePage, setActivePage] = useState<string>('Dashboard');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [authView, setAuthView] = useState<'login' | 'register'>('login'); // <-- IL NOSTRO INTERRUTTORE
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -34,8 +34,13 @@ const App: React.FC = () => {
     );
   }
 
+  // Se l'utente non è loggato, usiamo l'interruttore per decidere cosa mostrare
   if (!currentUser) {
-    return <LoginPage />;
+    if (authView === 'login') {
+      return <LoginPage onSwitchView={() => setAuthView('register')} />;
+    } else {
+      return <RegistrationPage onSwitchView={() => setAuthView('login')} />;
+    }
   }
 
   return (

@@ -1,5 +1,5 @@
-import { db, auth } from '../firebase';
-import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { db } from '../firebase';
+import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, DocumentReference } from 'firebase/firestore';
 import type { Customer } from '../../types';
 
 // Funzione per recuperare tutte le cartelle di un utente
@@ -11,18 +11,20 @@ export const getCustomers = async (userId: string): Promise<Customer[]> => {
   return customerList;
 };
 
-// Funzione per aggiungere una nuova cartella
-export const addCustomer = async (newCustomerData: Omit<Customer, 'id'>) => {
-  await addDoc(collection(db, 'customers'), newCustomerData);
+// Funzione per aggiungere una nuova cartella (CORRETTA)
+// Ora restituisce il riferimento al nuovo documento, che contiene l'ID
+export const addCustomer = async (newCustomerData: Omit<Customer, 'id'>): Promise<DocumentReference> => {
+  const docRef = await addDoc(collection(db, 'customers'), newCustomerData);
+  return docRef;
 };
 
 // Funzione per aggiornare il nome di una cartella
-export const updateCustomerName = async (customerId: string, newName: string, newSlug: string) => {
-  const customerDoc = doc(db, 'customers', customerId);
-  await updateDoc(customerDoc, { name: newName, slug: newSlug });
+export const updateCustomerName = async (customerId: string, newName:string, newSlug: string) => {
+    const customerDoc = doc(db, 'customers', customerId);
+    await updateDoc(customerDoc, { name: newName, slug: newSlug });
 };
 
 // Funzione per eliminare una cartella
 export const deleteCustomer = async (customerId: string) => {
-  await deleteDoc(doc(db, 'customers', customerId));
+    await deleteDoc(doc(db, 'customers', customerId));
 };

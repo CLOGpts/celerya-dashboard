@@ -1,32 +1,87 @@
 import React, { useState } from 'react';
 import { Mail, Lock } from 'lucide-react';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../src/firebase'; // Importiamo l'istanza di auth
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../src/firebase';
 
-export const LoginPage = (): JSX.Element => {
-  // Stati per gestire l'input dell'utente e gli errori
+interface LoginPageProps {
+  onSwitchView: () => void;
+}
+
+export const LoginPage = ({ onSwitchView }: LoginPageProps): JSX.Element => {
+  const [view, setView] = useState<'login' | 'reset'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
-  // Funzione che viene eseguita al momento del login
   const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault(); // Impedisce alla pagina di ricaricarsi
+    event.preventDefault();
     setError(null);
+    setMessage(null);
     setIsLoading(true);
-
     try {
-      // Usiamo la funzione di Firebase per tentare il login
       await signInWithEmailAndPassword(auth, email, password);
-      // Se il login ha successo, il componente App.tsx ci porterà automaticamente alla dashboard
     } catch (firebaseError: any) {
-      // Se Firebase restituisce un errore, lo mostriamo all'utente
-      setError("Credenziali non valide. Controlla email e password e riprova.");
-      setIsLoading(false);
+      setError("Credenziali non valide. Riprova.");
     }
+    setIsLoading(false);
   };
 
+  const handlePasswordReset = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    setMessage(null);
+    if (!email) {
+      setError("Per favore, inserisci un indirizzo email.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setMessage("Email di reset inviata! Controlla la tua casella di posta (anche lo spam).");
+    } catch (firebaseError: any) {
+      setError("Indirizzo email non trovato o non valido.");
+    }
+    setIsLoading(false);
+  };
+  
+  // --- VISTA PER IL RECUPERO PASSWORD ---
+  if (view === 'reset') {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 to-gray-200 flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 space-y-6">
+          <div className="text-center">
+            <h1 className="text-3xl font-bold text-gray-800">Recupera Password</h1>
+            <p className="text-gray-500 mt-2">Inserisci la tua email per ricevere un link di reset.</p>
+          </div>
+          <form className="space-y-6" onSubmit={handlePasswordReset}>
+            <div>
+              <label htmlFor="email" className="text-sm font-medium text-gray-700 block mb-2">Indirizzo Email</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input id="email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="tua@email.com"/>
+              </div>
+            </div>
+            {error && <p className="text-sm text-center text-red-600 bg-red-50 p-3 rounded-lg">{error}</p>}
+            {message && <p className="text-sm text-center text-green-600 bg-green-50 p-3 rounded-lg">{message}</p>}
+            <div>
+              <button type="submit" disabled={isLoading} className="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 disabled:bg-blue-400">
+                {isLoading ? 'Invio in corso...' : 'Invia link di reset'}
+              </button>
+            </div>
+          </form>
+          <p className="text-center text-sm text-gray-600">
+            <button type="button" onClick={() => { setView('login'); setError(null); setMessage(null); }} className="font-medium text-blue-600 hover:underline focus:outline-none">
+              Torna al Login
+            </button>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // --- VISTA PRINCIPALE DI LOGIN (CON I CAMPI CORRETTI) ---
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 to-gray-200 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 space-y-6">
@@ -34,83 +89,40 @@ export const LoginPage = (): JSX.Element => {
           <h1 className="text-3xl font-bold text-gray-800">Celerya</h1>
           <p className="text-gray-500 mt-2">Accedi alla tua dashboard</p>
         </div>
-
-        {/* Il form ora è collegato alla nostra funzione handleLogin */}
         <form className="space-y-6" onSubmit={handleLogin}>
+          {/* Campo Email */}
           <div>
-            <label htmlFor="email" className="text-sm font-medium text-gray-700 block mb-2">
-              Indirizzo Email
-            </label>
+            <label htmlFor="login-email" className="text-sm font-medium text-gray-700 block mb-2">Indirizzo Email</label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email} // Il valore dell'input è controllato dal nostro stato
-                onChange={(e) => setEmail(e.target.value)} // Aggiorniamo lo stato a ogni digitazione
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-                placeholder="tu@esempio.com"
-              />
+              <input id="login-email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="tua@email.com"/>
             </div>
           </div>
-
+          {/* Campo Password */}
           <div>
-            <label htmlFor="password" className="text-sm font-medium text-gray-700 block mb-2">
-              Password
-            </label>
+            <label htmlFor="login-password" className="text-sm font-medium text-gray-700 block mb-2">Password</label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password} // Il valore dell'input è controllato dal nostro stato
-                onChange={(e) => setPassword(e.target.value)} // Aggiorniamo lo stato a ogni digitazione
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-                placeholder="••••••••"
-              />
+              <input id="login-password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="••••••••"/>
             </div>
             <div className="text-right mt-2">
-              <a href="#" className="text-sm text-blue-600 hover:underline">
+              <button type="button" onClick={() => { setView('reset'); setError(null); setMessage(null); }} className="text-sm text-blue-600 hover:underline focus:outline-none">
                 Password dimenticata?
-              </a>
+              </button>
             </div>
           </div>
-
-          {/* Mostra il messaggio di errore se presente */}
-          {error && (
-            <p className="text-sm text-center text-red-600 bg-red-50 p-3 rounded-lg">
-              {error}
-            </p>
-          )}
-
+          {error && <p className="text-sm text-center text-red-600 bg-red-50 p-3 rounded-lg">{error}</p>}
           <div>
-            <button
-              type="submit"
-              disabled={isLoading} // Il bottone si disabilita durante il caricamento
-              className="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform transform hover:scale-105 disabled:bg-blue-400 disabled:cursor-not-allowed"
-            >
+            <button type="submit" disabled={isLoading} className="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 disabled:bg-blue-400">
               {isLoading ? 'Accesso in corso...' : 'Accedi'}
             </button>
           </div>
         </form>
-
-        <div className="flex items-center justify-center">
-          <div className="flex-grow border-t border-gray-300"></div>
-          <span className="mx-4 text-sm text-gray-500">Oppure</span>
-          <div className="flex-grow border-t border-gray-300"></div>
-        </div>
-        
         <p className="text-center text-sm text-gray-600">
           Non hai un account?{' '}
-          <a href="#" className="font-medium text-blue-600 hover:underline">
+          <button type="button" onClick={onSwitchView} className="font-medium text-blue-600 hover:underline focus:outline-none">
             Registrati ora
-          </a>
+          </button>
         </p>
       </div>
     </div>
