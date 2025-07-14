@@ -39,10 +39,22 @@ const DashboardPage: React.FC = () => {
     const handleDeleteCustomer = async (customerId: string) => { const customerToDelete = customers.find(c => c.id === customerId); if (!customerToDelete) return; if (window.confirm(`Sei sicuro di voler eliminare la cartella "${customerToDelete.name}"? L'azione è irreversibile.`)) { await deleteCustomer(customerId); setCustomers(prev => prev.filter(c => c.id !== customerId)); } };
     const handleContextMenu = (e: React.MouseEvent, customerId?: string) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, customerId }); };
     
-    // CORREZIONE FINALE: Logica di pulizia del JSON estremamente robusta
+    // SOLUZIONE BLINDATA: Aggiunta validazione del tipo di file PRIMA della chiamata API
     const handleExtract = async () => {
         if (!file || !selectedCustomer) return;
-        setIsExtracting(true); setError(null); setExtractedData(null); setAlerts([]);
+
+        // 1. VALIDAZIONE DEL FILE (LA NUOVA PARTE FONDAMENTALE)
+        const SUPPORTED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+        if (!SUPPORTED_MIME_TYPES.includes(file.type)) {
+            setError(`Formato file non supportato. Per favore, carica un'immagine (JPG, PNG) o un PDF.`);
+            return; // Interrompe l'esecuzione qui, evitando la chiamata API
+        }
+
+        setIsExtracting(true);
+        setError(null);
+        setExtractedData(null);
+        setAlerts([]);
+        
         try {
             const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY as string);
             const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
@@ -54,7 +66,7 @@ const DashboardPage: React.FC = () => {
             const response = result.response;
             const text = response.text();
 
-            // Logica "chirurgica" per estrarre il JSON, ignorando tutto il resto
+            // 2. LOGICA DI PULIZIA (ora opera su dati che sappiamo essere validi)
             const startIndex = text.indexOf('{');
             const endIndex = text.lastIndexOf('}');
             if (startIndex === -1 || endIndex === -1) {
@@ -70,7 +82,7 @@ const DashboardPage: React.FC = () => {
             setExtractedData(newProduct);
         } catch (e) {
             console.error("Estrazione fallita:", e);
-            setError("L'estrazione è fallita. Controlla la console per i dettagli e la risposta dell'AI.");
+            setError("L'estrazione è fallita. Controlla la console per i dettagli.");
         } finally {
             setIsExtracting(false);
         }

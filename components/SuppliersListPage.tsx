@@ -1,9 +1,3 @@
-
-
-
-
-
-
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -156,7 +150,6 @@ const DDTResourceCreationModal: React.FC<{
     const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
-        // The URL needs the supplier slug, which is unique across customers in this context
         const url = `${window.location.origin}${window.location.pathname}?supplier_slug=${supplier.slug}&ddt_id=${ddt.id}`;
         setQrLink(url);
         QRCode.toDataURL(url, { width: 256, margin: 1 })
@@ -429,7 +422,7 @@ const SuppliersListPage: React.FC = () => {
         <div className="p-8">
             <h1 className="text-3xl font-bold text-gray-800 mb-6">Lista Fornitori</h1>
 
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead className="bg-gray-50 border-b border-gray-200">
                         <tr>
@@ -599,3 +592,4 @@ const SuppliersListPage: React.FC = () => {
 };
 
 export default SuppliersListPage;
+

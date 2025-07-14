@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from './src/firebase';
 import { LoginPage } from './components/LoginPage';
-import { RegistrationPage } from './components/RegistrationPage'; // <-- NUOVO IMPORT
+import { RegistrationPage } from './components/RegistrationPage';
 import Sidebar from './components/Sidebar';
 import { SettingsPage } from './components/SettingsPage';
 import DashboardPage from './components/DashboardPage';
@@ -16,7 +16,7 @@ const App: React.FC = () => {
   const [activePage, setActivePage] = useState<string>('Dashboard');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
-  const [authView, setAuthView] = useState<'login' | 'register'>('login'); // <-- IL NOSTRO INTERRUTTORE
+  const [authView, setAuthView] = useState<'login' | 'register'>('login');
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -34,7 +34,6 @@ const App: React.FC = () => {
     );
   }
 
-  // Se l'utente non è loggato, usiamo l'interruttore per decidere cosa mostrare
   if (!currentUser) {
     if (authView === 'login') {
       return <LoginPage onSwitchView={() => setAuthView('register')} />;
@@ -46,7 +45,14 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen bg-gray-100 font-sans">
       <Sidebar activePage={activePage} setActivePage={setActivePage} user={currentUser} />
-      <main className="flex-1 overflow-y-auto">
+      
+      {/* 
+        ECCO LA CORREZIONE DEFINITIVA: 
+        Aggiungendo 'overflow-x-auto', il contenitore principale ora sa come gestire 
+        contenuti più larghi dello schermo, mostrando una barra di scorrimento orizzontale 
+        solo quando è necessario. Questo risolve il problema alla radice.
+      */}
+      <main className="flex-1 overflow-y-auto overflow-x-auto">
         {activePage === 'Dashboard' && <DashboardPage />}
         {activePage === 'Cruscotto Alert' && <AlertsDashboardPage />}
         {activePage === 'SYD AGENT' && <DataViewPage />}
