@@ -1,0 +1,28 @@
+[33mcfa416d5[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m FIX: Risolto overflow orizzontale in Lista Fornitori
+[33m7556b3fa[m FIX: Corretta estrazione dati da Gemini e ripristino avvio applicazione
+[33me921baef[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Migrazione a Firestore completata: base dati robusta e sicura
+[33m330708e3[m Primo salvataggio: App funzionante e login professionale
+[33m5561b42d[m[33m ([m[1;31morigin/temp-salvataggio[m[33m)[m commit iniziale
+[33m2e4e279d[m fix: Corregge chiamate API Gemini e stabilizza componenti
+[33m23721fd5[m feat: Implementa autenticazione e struttura dati multi-cliente
+[33m5a735f56[m feat: implementa creazione e cancellazione clienti
+[33m89623869[m feat: sidebar  legge clienti da Firestore
+[33m0702f3b1[m feat: prova lettura Firestore dal client
+[33m4c4eedbc[m feat: integra Firebase SDK (init)
+[33m9f3712cc[m Update index.html
+[33ma5fa6b73[m fix: Dockerfile – build static site with Vite and serve dist
+[33m351a49b4[m chore: update Cloud Build pipeline after vite static build
+[33m0c80f943[m feat: build static site with vite
+[33m05804649[m chore: allineamento completo progetto locale vs GitHub
+[33m436de3a7[m Fix build trigger with logging config
+[33m476b7be7[m Add Dockerfile and update cloudbuild.yaml for Cloud Build deploy
+[33m30ac1ad0[m Update from Google AI Studio: visual + metadata changes
+[33mcc3c0b84[m Update README.md
+[33m9c57a1f3[m Upload completo dei file del progetto
+[33meb2782a5[m Aggiorna script di deploy per sincronizzare tutti i file
+[33m20a24040[m Caricamento completo del progetto
+[33md32e9e5a[m Risolto conflitto su cloudbuild.yaml
+[33m627b8881[m Salvo cloudbuild.yaml prima del merge
+[33m6c16487f[m Fix bucket path in cloudbuild.yaml
+[33m772fce6c[m Added cloudbuild.yaml for Cloud Build
+[33me32e6c5f[m Initial commit of Celerya app

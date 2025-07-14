@@ -1,4 +1,3 @@
-
 import type { Section, Product, Alert } from './types';
 
 type FieldDefinition = {
