@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { auth, db } from '../src/firebase';
-import { getCustomers, addCustomer, updateCustomerName, deleteCustomer } from '../src/lib/firestore';
-import { collection, addDoc } from 'firebase/firestore';
+import { auth } from '../src/firebase';
+import { getCustomers, addCustomer, updateCustomerName, deleteCustomer, addDocumentToSupplier } from '../src/lib/firestore';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { Product, Alert, Customer, AllSuppliersData } from '../types';
 import PdfContent from './PdfContent';
@@ -9,7 +8,7 @@ import { getCustomSchema, generateAlertsFromSchema, generatePromptFromSchema } f
 import UploadBox from './UploadBox';
 import { FolderIcon, ArrowLeftIcon } from './icons';
 
-// --- Componenti di Supporto ---
+// --- Componenti di Supporto (Invariati) ---
 const slugify = (text: string) => text.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => { const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = () => resolve((reader.result as string).split(',')[1]); reader.onerror = error => reject(error); });
 const ContextMenu: React.FC<{ x: number; y: number; items: { label: string; onClick: () => void; className?: string }[]; onClose: () => void; }> = ({ x, y, items, onClose }) => { const menuRef = useRef<HTMLDivElement>(null); useEffect(() => { const handleClickOutside = (event: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(event.target as Node)) onClose(); }; document.addEventListener('mousedown', handleClickOutside); return () => document.removeEventListener('mousedown', handleClickOutside); }, [onClose]); return ( <div ref={menuRef} style={{ top: y, left: x }} className="absolute z-50 bg-white rounded-md shadow-lg border py-1 w-48"> <ul>{items.map((item, index) => ( <li key={index}><button onClick={() => { item.onClick(); onClose(); }} className={`w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 ${item.className || ''}`}>{item.label}</button></li> ))}</ul> </div> ); };
@@ -28,17 +27,19 @@ const DashboardPage: React.FC = () => {
     const [extractedData, setExtractedData] = useState<Product | null>(null);
     const [alerts, setAlerts] = useState<Alert[]>([]);
     
-    const loadCustomers = useCallback(async () => { setIsLoading(true); try { const user = auth.currentUser; if (user) { const customerList = await getCustomers(user.uid); setCustomers(customerList); localStorage.setItem('celerya_customers', JSON.stringify(customerList)); } } catch (e) { console.error("Errore caricamento clienti:", e); } finally { setIsLoading(false); } }, []);
+    const loadCustomers = useCallback(async () => { setIsLoading(true); try { const user = auth.currentUser; if (user) { const customerList = await getCustomers(user.uid); setCustomers(customerList); } } catch (e) { console.error("Errore caricamento clienti:", e); } finally { setIsLoading(false); } }, []);
     useEffect(() => { loadCustomers(); }, [loadCustomers]);
     useEffect(() => { if (renamingCustomerId && renameInputRef.current) { renameInputRef.current.focus(); renameInputRef.current.select(); } }, [renamingCustomerId]);
 
-    const handleCreateCustomer = async () => { const user = auth.currentUser; if (!user) return; const newCustomerData = { name: 'Nuova Cartella', slug: `nuova-cartella-${Date.now()}`, userId: user.uid }; const newCustomerRef = await addCustomer(newCustomerData); const finalNewCustomer = { ...newCustomerData, id: newCustomerRef.id }; const updatedCustomers = [...customers, finalNewCustomer]; setCustomers(updatedCustomers); localStorage.setItem('celerya_customers', JSON.stringify(updatedCustomers)); window.dispatchEvent(new Event('celerya-data-updated')); setRenamingCustomerId(newCustomerRef.id); };
-    const handleRenameCustomer = async (customerId: string, newName: string) => { if (!newName.trim()) { setRenamingCustomerId(null); await loadCustomers(); return; } const newSlug = slugify(newName); await updateCustomerName(customerId, newName.trim(), newSlug); const updatedCustomers = customers.map(c => c.id === customerId ? { ...c, name: newName.trim(), slug: newSlug } : c); setCustomers(updatedCustomers); localStorage.setItem('celerya_customers', JSON.stringify(updatedCustomers)); window.dispatchEvent(new Event('celerya-data-updated')); setRenamingCustomerId(null); };
-    const handleDeleteCustomer = async (customerId: string) => { const customerToDelete = customers.find(c => c.id === customerId); if (!customerToDelete) return; if (window.confirm(`Sei sicuro di voler eliminare la cartella "${customerToDelete.name}"?`)) { await deleteCustomer(customerId); const updatedCustomers = customers.filter(c => c.id !== customerId); setCustomers(updatedCustomers); localStorage.setItem('celerya_customers', JSON.stringify(updatedCustomers)); window.dispatchEvent(new Event('celerya-data-updated')); } };
+    const handleCreateCustomer = async () => { const user = auth.currentUser; if (!user) return; const newCustomerData = { name: 'Nuova Cartella', slug: `nuova-cartella-${Date.now()}`, userId: user.uid }; await addCustomer(newCustomerData); await loadCustomers(); setRenamingCustomerId(null); };
+    const handleRenameCustomer = async (customerId: string, newName: string) => { if (!newName.trim()) { setRenamingCustomerId(null); return; } const newSlug = slugify(newName); await updateCustomerName(customerId, newName.trim(), newSlug); await loadCustomers(); setRenamingCustomerId(null); };
+    const handleDeleteCustomer = async (customerId: string) => { const customerToDelete = customers.find(c => c.id === customerId); if (!customerToDelete) return; if (window.confirm(`Sei sicuro di voler eliminare la cartella "${customerToDelete.name}"?`)) { await deleteCustomer(customerId); await loadCustomers(); } };
     const handleContextMenu = (e: React.MouseEvent, customerId?: string) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, customerId }); };
     
     const handleExtract = async () => {
-        if (!file || !selectedCustomer) return;
+        const user = auth.currentUser;
+        if (!file || !selectedCustomer || !user) return;
+        
         setIsExtracting(true);
         setError(null);
         setExtractedData(null);
@@ -58,51 +59,43 @@ const DashboardPage: React.FC = () => {
             const parsedData = JSON.parse(jsonText);
             const newProduct: Product = { id: `prod-${Date.now()}`, ...parsedData };
             
-            // Salva in Firestore
-            await addDoc(collection(db, "customers", selectedCustomer.id, "technical_sheets"), { ...newProduct, fileName: file.name, analyzedAt: new Date().toISOString() });
+            // Passo 1: Salva i dati in modo sicuro su Firestore
+            await addDocumentToSupplier(user.uid, selectedCustomer.id, newProduct);
             
-            // --- INIZIO LOGICA DI COLLEGAMENTO CORRETTA E COMPLETA ---
+            // Passo 2: Manteniamo temporaneamente la logica su localStorage per garantire
+            // la compatibilità con le altre pagine, finché non le aggiorneremo.
             const supplierName = newProduct.identificazione?.produttore;
             if (supplierName) {
                 const suppliersData: AllSuppliersData = JSON.parse(localStorage.getItem('celerya_suppliers_data') || '{}');
-                
-                // Assicura che l'oggetto fornitore esista, con gli array per i documenti
                 if (!suppliersData[supplierName]) {
                     suppliersData[supplierName] = { pdfs: [], ddts: [] };
                 }
-                
-                // Assicura che l'array pdfs esista (per retrocompatibilità)
                 if (!suppliersData[supplierName].pdfs) {
                     suppliersData[supplierName].pdfs = [];
                 }
-
-                // Aggiunge il nuovo documento PDF all'array
                 suppliersData[supplierName].pdfs.push(newProduct);
-                
-                // Aggiorna i metadati del fornitore (lastUpdate, customer info)
                 suppliersData[supplierName].lastUpdate = new Date().toISOString();
                 suppliersData[supplierName].customerSlug = selectedCustomer.slug;
                 suppliersData[supplierName].customerName = selectedCustomer.name;
-
-                // Salva l'intera struttura dati aggiornata nel localStorage
                 localStorage.setItem('celerya_suppliers_data', JSON.stringify(suppliersData));
             }
-            // --- FINE LOGICA DI COLLEGAMENTO CORRETTA E COMPLETA ---
-
+            
+            // Logica degli alert (mantenuta su localStorage per ora)
             const generatedAlerts = generateAlertsFromSchema(newProduct, customSchema);
             const allAlerts = JSON.parse(localStorage.getItem('celerya_alerts_data') || '[]');
             const enrichedAlerts = generatedAlerts.map(alert => ({ ...alert, productId: newProduct.id, productName: newProduct.descrizione?.denominazioneLegale || 'N/D', supplierName: newProduct.identificazione?.produttore || 'N/D', customerName: selectedCustomer.name, savedAt: new Date().toISOString() }));
             localStorage.setItem('celerya_alerts_data', JSON.stringify([...allAlerts, ...enrichedAlerts]));
 
+            // Aggiorna la UI della pagina corrente
             setAlerts(generatedAlerts);
             setExtractedData(newProduct);
             
-            // Invia il segnale globale per notificare tutte le altre pagine
+            // Passo 3: Invia il segnale di aggiornamento per notificare le altre pagine.
             window.dispatchEvent(new Event('celerya-data-updated'));
 
         } catch (e) {
             console.error("Estrazione fallita:", e);
-            setError("L'estrazione è fallita. Controlla la console per i dettagli.");
+            setError("L'estrazione è fallita. Controlla la console.");
         } finally {
             setIsExtracting(false);
         }

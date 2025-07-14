@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import type { AllSuppliersData, Customer, Supplier, Product, DDT } from '../types';
+import type { Supplier, Product, DDT } from '../types';
 import { DownloadIcon, ExcelIcon, QrCodeIcon, EyeIcon, ArrowLeftIcon } from './icons';
 import PdfContent from './PdfContent';
 import ResourceQrModal from './ResourceQrModal';
@@ -7,6 +7,8 @@ import DDTResourceQrModal from './DDTResourceQrModal';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx-js-style';
+import { auth } from '../src/firebase';
+import { getSuppliersWithDocuments, savePdfResourceUrl, saveDdtResourceUrl } from '../src/lib/firestore';
 
 const SuppliersListPage: React.FC = () => {
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -22,27 +24,19 @@ const SuppliersListPage: React.FC = () => {
     const [resourceModal, setResourceModal] = useState<{ isOpen: boolean; data: any; supplier: Supplier | null }>({ isOpen: false, data: null, supplier: null });
     const [ddtResourceModal, setDdtResourceModal] = useState<{ isOpen: boolean; data: any; supplier: Supplier | null }>({ isOpen: false, data: null, supplier: null });
 
-    const loadSuppliers = useCallback(() => {
+    const loadSuppliers = useCallback(async () => {
         setIsLoading(true);
+        const user = auth.currentUser;
+        if (!user) {
+            setIsLoading(false);
+            setSuppliers([]);
+            return;
+        }
         try {
-            const suppliersData: AllSuppliersData = JSON.parse(localStorage.getItem('celerya_suppliers_data') || '{}');
-            const customers: Customer[] = JSON.parse(localStorage.getItem('celerya_customers') || '[]');
-            const customerMap = new Map(customers.map(c => [c.slug, c.name]));
-
-            const supplierList: Supplier[] = Object.entries(suppliersData).map(([name, data]) => ({
-                id: name.replace(/\s+/g, '-').toLowerCase(),
-                name,
-                customerName: data.customerName || customerMap.get(data.customerSlug) || 'Cliente non trovato',
-                customerSlug: data.customerSlug,
-                lastUpdate: data.lastUpdate,
-                status: 'Analizzato',
-                pdfs: data.pdfs || [],
-                ddts: data.ddts || [],
-            }));
-
-            setSuppliers(supplierList.sort((a, b) => new Date(b.lastUpdate).getTime() - new Date(a.lastUpdate).getTime()));
+            const supplierList = await getSuppliersWithDocuments(user.uid);
+            setSuppliers(supplierList);
         } catch (e) {
-            console.error("Errore nel caricamento dei dati fornitori:", e);
+            console.error("Errore caricamento fornitori da Firestore:", e);
             setSuppliers([]);
         } finally {
             setIsLoading(false);
@@ -50,11 +44,18 @@ const SuppliersListPage: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        loadSuppliers();
-        const handleDataUpdate = () => loadSuppliers();
-        window.addEventListener('celerya-data-updated', handleDataUpdate);
+        const unsubscribe = auth.onAuthStateChanged(user => {
+            if (user) {
+                loadSuppliers();
+            } else {
+                setSuppliers([]);
+                setIsLoading(false);
+            }
+        });
+        window.addEventListener('celerya-data-updated', loadSuppliers);
         return () => {
-            window.removeEventListener('celerya-data-updated', handleDataUpdate);
+            unsubscribe();
+            window.removeEventListener('celerya-data-updated', loadSuppliers);
         };
     }, [loadSuppliers]);
 
@@ -84,10 +85,8 @@ const SuppliersListPage: React.FC = () => {
         setDrawerOpen(true);
     };
 
-    const handleDownloadPdfClick = (pdfData: Product) => {
-        setPdfToGenerate(pdfData);
-    };
-
+    const handleDownloadPdfClick = (pdfData: Product) => setPdfToGenerate(pdfData);
+    
     const handleDownloadExcelClick = (product: Product) => {
         const wb = XLSX.utils.book_new();
         const wsData: any[][] = [
@@ -114,45 +113,51 @@ const SuppliersListPage: React.FC = () => {
         
         XLSX.writeFile(wb, `DDT_${ddtData.numeroDocumento}.xlsx`);
     };
+    
+    const handleCreateResourceClick = (pdf: Product, supplier: Supplier) => setResourceModal({ isOpen: true, data: pdf, supplier });
+    const handleCreateDDTResourceClick = (ddt: DDT, supplier: Supplier) => setDdtResourceModal({ isOpen: true, data: ddt, supplier });
 
-    const handleCreateResourceClick = (pdf: Product, supplier: Supplier) => {
-        setResourceModal({ isOpen: true, data: pdf, supplier });
-    };
-
-    const handleCreateDDTResourceClick = (ddt: DDT, supplier: Supplier) => {
-        setDdtResourceModal({ isOpen: true, data: ddt, supplier });
-    };
-
-    const handleSaveResource = (customerSlug: string, supplierName: string, pdfId: string, qrCodeUrl: string) => {
-        const suppliersData: AllSuppliersData = JSON.parse(localStorage.getItem('celerya_suppliers_data') || '{}');
-        const supplier = suppliersData[supplierName];
-        if (supplier && supplier.pdfs) {
-            const pdfIndex = supplier.pdfs.findIndex(p => p.id === pdfId);
-            if (pdfIndex > -1) {
-                supplier.pdfs[pdfIndex].qrCodeUrl = qrCodeUrl;
-                localStorage.setItem('celerya_suppliers_data', JSON.stringify(suppliersData));
-                loadSuppliers();
-                setSelectedSupplier(prev => prev ? {...prev, pdfs: supplier.pdfs} : null);
-            }
+    const handleSaveResource = async (supplierId: string, pdfId: string, qrCodeUrl: string) => {
+        try {
+            await savePdfResourceUrl(supplierId, pdfId, qrCodeUrl);
+            await loadSuppliers(); // Ricarica i dati per aggiornare la UI
+            // Aggiorna lo stato del drawer se è aperto per lo stesso fornitore
+            setSelectedSupplier(prev => {
+                if (prev && prev.id === supplierId) {
+                    const updatedPdfs = prev.pdfs.map(p => p.id === pdfId ? { ...p, qrCodeUrl } : p);
+                    return { ...prev, pdfs: updatedPdfs };
+                }
+                return prev;
+            });
+        } catch (error) {
+            console.error("Errore salvataggio risorsa QR:", error);
+        } finally {
+            setResourceModal({ isOpen: false, data: null, supplier: null });
         }
-        setResourceModal({ isOpen: false, data: null, supplier: null });
     };
 
-    const handleSaveDDTResource = (customerSlug: string, supplierName: string, ddtId: string, qrCodeUrl: string) => {
-        const suppliersData: AllSuppliersData = JSON.parse(localStorage.getItem('celerya_suppliers_data') || '{}');
-        const supplier = suppliersData[supplierName];
-        if (supplier && supplier.ddts) {
-            const ddtIndex = supplier.ddts.findIndex(d => d.id === ddtId);
-            if (ddtIndex > -1) {
-                supplier.ddts[ddtIndex].qrCodeUrl = qrCodeUrl;
-                localStorage.setItem('celerya_suppliers_data', JSON.stringify(suppliersData));
-                loadSuppliers();
-                setSelectedSupplier(prev => prev ? {...prev, ddts: supplier.ddts} : null);
-            }
+    const handleSaveDDTResource = async (supplierId: string, ddtId: string, qrCodeUrl: string) => {
+        try {
+            await saveDdtResourceUrl(supplierId, ddtId, qrCodeUrl);
+            await loadSuppliers();
+             setSelectedSupplier(prev => {
+                if (prev && prev.id === supplierId) {
+                    const updatedDdts = prev.ddts.map(d => d.id === ddtId ? { ...d, qrCodeUrl } : d);
+                    return { ...prev, ddts: updatedDdts };
+                }
+                return prev;
+            });
+        } catch (error) {
+            console.error("Errore salvataggio risorsa DDT QR:", error);
+        } finally {
+            setDdtResourceModal({ isOpen: false, data: null, supplier: null });
         }
-        setDdtResourceModal({ isOpen: false, data: null, supplier: null });
     };
 
+    if (isLoading && suppliers.length === 0) {
+        return <div className="p-8 text-center font-semibold text-gray-500">Caricamento fornitori in corso...</div>;
+    }
+    
     return (
         <>
             <div className="p-8 bg-gray-50 min-h-full">
@@ -168,14 +173,14 @@ const SuppliersListPage: React.FC = () => {
                         <thead className="bg-gray-50 border-b border-gray-200">
                             <tr>
                                 <th className="p-4 font-semibold text-sm text-gray-600">NOME FORNITORE</th>
-                                <th className="p-4 font-semibold text-sm text-gray-600">CARTELLA CLIENTE</th>
+                                <th className="p-4 font-semibold text-sm text-gray-600">CLIENTE ASSOCIATO</th>
                                 <th className="p-4 font-semibold text-sm text-gray-600">DOCUMENTI</th>
                                 <th className="p-4 font-semibold text-sm text-gray-600">ULTIMA ANALISI</th>
                                 <th className="p-4"></th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
-                            {suppliers.map((supplier) => (
+                            {suppliers.length > 0 ? suppliers.map((supplier) => (
                                 <tr key={supplier.id} className="hover:bg-gray-50">
                                     <td className="p-4 font-medium text-gray-900">{supplier.name}</td>
                                     <td className="p-4 text-gray-600">{supplier.customerName}</td>
@@ -185,7 +190,14 @@ const SuppliersListPage: React.FC = () => {
                                         <button onClick={() => handleSupplierClick(supplier)} className="p-2 rounded-md hover:bg-gray-200"><EyeIcon className="w-5 h-5 text-gray-600" /></button>
                                     </td>
                                 </tr>
-                            ))}
+                            )) : (
+                                <tr>
+                                    <td colSpan={5} className="p-12 text-center text-gray-500">
+                                        <p className="font-semibold">Nessun fornitore trovato.</p>
+                                        <p className="mt-1 text-sm">Inizia analizzando un documento dalla dashboard.</p>
+                                    </td>
+                                </tr>
+                            )}
                         </tbody>
                     </table>
                 </div>
@@ -209,9 +221,9 @@ const SuppliersListPage: React.FC = () => {
                             {activeTab === 'pdfs' && (selectedSupplier.pdfs || []).map(pdf => (
                                 <div key={pdf.id} className="bg-white p-3 rounded-lg shadow-sm mb-3 border flex justify-between items-center">
                                     <div>
-                                        <p className="font-semibold">{pdf.descrizione?.denominazioneLegale}</p>
-                                        <p className="text-xs text-gray-500">Codice: {pdf.identificazione?.codiceProdotto}</p>
-                                        {pdf.qrCodeUrl && <span className="text-xs font-bold text-green-600">Risorsa QR Creata</span>}
+                                        <p className="font-semibold">{pdf.descrizione?.denominazioneLegale || 'Scheda senza nome'}</p>
+                                        <p className="text-xs text-gray-500">ID: {pdf.id}</p>
+                                        {pdf.qrCodeUrl && <span className="mt-1 inline-block text-xs font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full">Risorsa Creata</span>}
                                     </div>
                                     <div className="flex gap-2">
                                         <button onClick={() => handleCreateResourceClick(pdf, selectedSupplier)} title="Crea Risorsa QR" className="p-2 rounded-md hover:bg-gray-100"><QrCodeIcon className="w-5 h-5 text-blue-600"/></button>
@@ -220,30 +232,12 @@ const SuppliersListPage: React.FC = () => {
                                     </div>
                                 </div>
                             ))}
-                            {activeTab === 'ddts' && (selectedSupplier.ddts || []).map(ddt => (
-                                 <div key={ddt.id} className="bg-white p-3 rounded-lg shadow-sm mb-3 border flex justify-between items-center">
-                                     <div>
-                                         <p className="font-semibold">DDT N°: {ddt.numeroDocumento}</p>
-                                         <p className="text-xs text-gray-500">Data: {ddt.dataDocumento}</p>
-                                         {ddt.qrCodeUrl && <span className="text-xs font-bold text-green-600">Risorsa QR Creata</span>}
-                                     </div>
-                                     <div className="flex gap-2">
-                                        <button onClick={() => handleCreateDDTResourceClick(ddt, selectedSupplier)} title="Crea Risorsa QR" className="p-2 rounded-md hover:bg-gray-100"><QrCodeIcon className="w-5 h-5 text-blue-600"/></button>
-                                        <button onClick={() => handleDownloadDDTClick(ddt)} title="Esporta Excel" className="p-2 rounded-md hover:bg-gray-100"><ExcelIcon className="w-5 h-5 text-green-600"/></button>
-                                     </div>
-                                 </div>
-                            ))}
                         </div>
                     </div>
                 )}
             </div>
             
-            {isGenerating && (
-                <div style={{ position: 'absolute', left: '-9999px', top: 0, width: '210mm' }}>
-                    <PdfContent ref={pdfRef} data={pdfToGenerate!} alerts={[]} schema={null} />
-                </div>
-            )}
-            
+            {isGenerating && (<div style={{ position: 'absolute', left: '-9999px', top: 0, width: '210mm' }}><PdfContent ref={pdfRef} data={pdfToGenerate!} alerts={[]} schema={null} /></div>)}
             {resourceModal.isOpen && <ResourceQrModal isOpen={resourceModal.isOpen} data={resourceModal.data} supplier={resourceModal.supplier} onClose={() => setResourceModal({isOpen: false, data: null, supplier: null})} onSave={handleSaveResource} />}
             {ddtResourceModal.isOpen && <DDTResourceQrModal isOpen={ddtResourceModal.isOpen} data={ddtResourceModal.data} supplier={ddtResourceModal.supplier} onClose={() => setDdtResourceModal({isOpen: false, data: null, supplier: null})} onSave={handleSaveDDTResource} />}
         </>
