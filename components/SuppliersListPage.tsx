@@ -9,9 +9,9 @@ import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx-js-style';
 import { auth } from '../src/firebase';
 import { getSuppliersWithDocuments, savePdfResourceUrl, saveDdtResourceUrl } from '../src/lib/firestore';
-// Import necessario per la logica di export avanzata
 import { CELERYA_STANDARD } from '../constants';
 
+// --- Componente Principale ---
 const SuppliersListPage: React.FC = () => {
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -83,6 +83,12 @@ const SuppliersListPage: React.FC = () => {
         }
     }, [pdfToGenerate]);
 
+    const getSupplierDisplayName = (nameField: any): string => {
+        if (typeof nameField === 'string') return nameField;
+        if (typeof nameField === 'object' && nameField !== null && nameField.nome) return nameField.nome;
+        return 'Fornitore non definito';
+    };
+
     const handleSupplierClick = (supplier: Supplier) => {
         setSelectedSupplier(supplier);
         setActiveTab('pdfs');
@@ -91,7 +97,6 @@ const SuppliersListPage: React.FC = () => {
 
     const handleDownloadPdfClick = (pdfData: Product) => setPdfToGenerate(pdfData);
 
-    // --- FUNZIONE EXCEL POTENZIATA E DEFINITIVA ---
     const handleDownloadExcelClick = (product: Product) => {
         const wb = XLSX.utils.book_new();
         const wsData: (string | { v: string; s: any } | null)[][] = [];
@@ -162,7 +167,24 @@ const SuppliersListPage: React.FC = () => {
         XLSX.writeFile(wb, `Standard_Celerya_${today}_${supplierName}.xlsx`);
     };
     
-    const handleDownloadDDTClick = (ddtData: DDT) => { /* Logica futura per DDT */ };
+    // **MODIFICA CHIAVE**: Abbiamo implementato la logica per l'esportazione Excel dei DDT.
+    const handleDownloadDDTClick = (ddtData: DDT) => {
+        if (!ddtData || !ddtData.prodotti) return;
+
+        const worksheetData = ddtData.prodotti.map(prodotto => ({
+            'Prodotto': prodotto.nomeProdotto || 'N/D',
+            'Quantità': prodotto.quantita ?? 'N/D',
+            'Lotto': prodotto.lotto || 'MANCANTE',
+            'Scadenza': prodotto.scadenza || 'MANCANTE'
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Dettaglio DDT');
+
+        const fileName = `DDT_${ddtData.numeroDDT || 'export'}.xlsx`;
+        XLSX.writeFile(workbook, fileName);
+    };
     
     const handleCreateResourceClick = (pdf: Product, supplier: Supplier) => setResourceModal({ isOpen: true, data: pdf, supplier });
     const handleCreateDDTResourceClick = (ddt: DDT, supplier: Supplier) => setDdtResourceModal({ isOpen: true, data: ddt, supplier });
@@ -175,7 +197,15 @@ const SuppliersListPage: React.FC = () => {
         } catch (error) { console.error("Errore salvataggio risorsa QR:", error); } 
         finally { setResourceModal({ isOpen: false, data: null, supplier: null }); }
     };
-    const handleSaveDDTResource = async (supplierId: string, ddtId: string, qrCodeUrl: string) => { /* Logica futura per DDT */ };
+    
+    const handleSaveDDTResource = async (supplierId: string, ddtId: string, qrCodeUrl: string) => {
+        try {
+            await saveDdtResourceUrl(supplierId, ddtId, qrCodeUrl);
+            await loadSuppliers();
+            setSelectedSupplier(prev => prev && prev.id === supplierId ? { ...prev, ddts: prev.ddts.map(d => d.id === ddtId ? { ...d, qrCodeUrl } : d) } : prev);
+        } catch (error) { console.error("Errore salvataggio risorsa QR per DDT:", error); }
+        finally { setDdtResourceModal({isOpen: false, data: null, supplier: null }); }
+    };
 
     if (isLoading && suppliers.length === 0) {
         return <div className="p-8 text-center font-semibold text-gray-500">Caricamento fornitori in corso...</div>;
@@ -205,7 +235,7 @@ const SuppliersListPage: React.FC = () => {
                         <tbody className="divide-y divide-gray-200">
                             {suppliers.length > 0 ? suppliers.map((supplier) => (
                                 <tr key={supplier.id} className="hover:bg-gray-50">
-                                    <td className="p-4 font-medium text-gray-900">{supplier.name}</td>
+                                    <td className="p-4 font-medium text-gray-900">{getSupplierDisplayName(supplier.name)}</td>
                                     <td className="p-4 text-gray-600">{supplier.customerName}</td>
                                     <td className="p-4 text-gray-600">{(supplier.pdfs?.length || 0) + (supplier.ddts?.length || 0)}</td>
                                     <td className="p-4 text-gray-600 font-mono text-sm">{new Date(supplier.lastUpdate).toLocaleString('it-IT')}</td>
@@ -232,7 +262,7 @@ const SuppliersListPage: React.FC = () => {
                         <header className="p-4 border-b bg-gray-50 flex items-center gap-4">
                             <button onClick={() => setDrawerOpen(false)} className="p-2 rounded-full hover:bg-gray-200"><ArrowLeftIcon className="w-6 h-6" /></button>
                             <div>
-                                <h2 className="text-xl font-bold text-gray-800">{selectedSupplier.name}</h2>
+                                <h2 className="text-xl font-bold text-gray-800">{getSupplierDisplayName(selectedSupplier.name)}</h2>
                                 <p className="text-sm text-gray-500">Cliente: {selectedSupplier.customerName}</p>
                             </div>
                         </header>
@@ -255,6 +285,19 @@ const SuppliersListPage: React.FC = () => {
                                     </div>
                                 </div>
                             ))}
+                             {activeTab === 'ddts' && (selectedSupplier.ddts || []).map(ddt => (
+                                <div key={ddt.id} className="bg-white p-3 rounded-lg shadow-sm mb-3 border flex justify-between items-center">
+                                     <div>
+                                        <p className="font-semibold">DDT N. {ddt.numeroDDT || 'Senza numero'}</p>
+                                        <p className="text-xs text-gray-500">ID: {ddt.id}</p>
+                                        {ddt.qrCodeUrl && <span className="mt-1 inline-block text-xs font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full">Risorsa Creata</span>}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => handleCreateDDTResourceClick(ddt, selectedSupplier)} title="Crea Risorsa QR per DDT" className="p-2 rounded-md hover:bg-gray-100"><QrCodeIcon className="w-5 h-5 text-blue-600"/></button>
+                                        <button onClick={() => handleDownloadDDTClick(ddt)} title="Esporta DDT in Excel" className="p-2 rounded-md hover:bg-gray-100"><ExcelIcon className="w-5 h-5 text-green-600"/></button>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 )}
@@ -271,5 +314,5 @@ const SuppliersListPage: React.FC = () => {
         </>
     );
 };
-export default SuppliersListPage;
 
+export default SuppliersListPage;
