@@ -14,8 +14,15 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    
+    // --- MODIFICHE AGGIUNTE QUI ---
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
   },
-  "include": ["src", "components", "constants", "types", "App.tsx", "vite.config.ts"],
+  // --- MODIFICA: Aggiunte 'ui' e 'hooks' per includere tutte le cartelle corrette ---
+  "include": ["src", "components", "ui", "hooks", "types.ts", "App.tsx", "vite.config.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

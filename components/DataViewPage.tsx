@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GoogleGenAI, DynamicRetrievalConfigMode } from "@google/genai";
-import { PRODUCTS_DATA } from '../data/products';
-import { DDT_DATA } from '../data/ddt';
-import { SUPPLIERS_DATA } from '../data/suppliers';
-import { SpinnerIcon } from './icons/SpinnerIcon';
-import { SendIcon } from './icons/SendIcon';
-import { PaperclipIcon } from './icons/PaperclipIcon';
-import { MicrophoneIcon } from './icons/MicrophoneIcon';
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+import { useAuth } from '../hooks/useAuth'; 
+import { getAllUserData } from '@/lib/firestore';
+import type { Supplier, SpeechRecognition, SpeechRecognitionEvent } from '../types';
+import { SpinnerIcon, SendIcon, PaperclipIcon, MicrophoneIcon, TrashIcon } from '../components/icons';
 import McpFileSelector from './McpFileSelector';
-import type { AllSuppliersData, SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from '../types';
+
 
 const SourceLink: React.FC<{ uri: string, title: string }> = ({ uri, title }) => (
   <a href={uri} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-2 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors">
@@ -57,44 +55,10 @@ const fileToBase64 = (file: File): Promise<{ mimeType: string, data: string }> =
   });
 };
 
-const XIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-  </svg>
-);
-
 const SYD_INTRO_PROMPT =
-  `Ciao! Sono SYD AGENT, il tuo assistente AI integrato in questa piattaforma.
-La mia missione è essere il tuo copilota intelligente: ti aiuto a navigare, analizzare e sfruttare i dati in modo rapido ed efficace.
-Sono attivo in 4 aree principali:
-1. **Assistente Dati Aziendali**: rispondo a domande su prodotti, DDT e fornitori salvati nella piattaforma.
-2. **Gestore File e Cloud**: ti aiuto a elencare, selezionare e analizzare file locali o in cloud.
-3. **Ricercatore Web**: effettuo ricerche aggiornate online e cito sempre le fonti.
-4. **Esperto Comunicazione Commerciale**: preparo bozze, email e messaggi basati sui tuoi dati.
-Puoi chiedermi qualsiasi cosa: sono qui per automatizzare le attività, farti risparmiare tempo e darti sempre risposte precise.`;
-
-// Utility per individuare richieste "interne" (prodotti, DDT, fornitori)
-const matchInternalData = (query: string) => {
-  // Esempio: modificare/estendere con regex e logica più sofisticata su base esigenza reale
-  if (/allergeni/i.test(query) && PRODUCTS_DATA) {
-    // Cerca prodotto per nome
-    const prod = Object.values(PRODUCTS_DATA).find(p => query.toLowerCase().includes((p.nome || '').toLowerCase()));
-    if (prod) return { type: 'product', result: prod };
-  }
-  if (/ddt/i.test(query) && DDT_DATA) {
-    const ddtNum = query.match(/ddt\s*(n(umero)?\.?\s*)?(\d+)/i)?.[3];
-    if (ddtNum) {
-      const ddt = DDT_DATA.find(d => d.numero === ddtNum);
-      if (ddt) return { type: 'ddt', result: ddt };
-    }
-  }
-  if (/fornitore|supplier/i.test(query) && SUPPLIERS_DATA) {
-    // Estende la logica di ricerca fornitori
-    const forn = SUPPLIERS_DATA.find(f => query.toLowerCase().includes(f.ragioneSociale.toLowerCase()));
-    if (forn) return { type: 'supplier', result: forn };
-  }
-  return null;
-};
+  `Ciao! Sono SYD AGENT, il tuo assistente AI integrato.
+La mia missione è essere il tuo copilota intelligente per i tuoi dati aziendali.
+Chiedimi pure di analizzare fornitori, schede tecniche, DDT o di effettuare ricerche online. Sono qui per farti risparmiare tempo e darti risposte precise.`;
 
 const DataViewPage: React.FC = () => {
   const [messages, setMessages] = useState<{ role: 'user' | 'model'; text: string; sources?: any[] }[]>([
@@ -110,7 +74,10 @@ const DataViewPage: React.FC = () => {
   const [isListening, setIsListening] = useState(false);
   const [isSpeechRecognitionSupported, setIsSpeechRecognitionSupported] = useState(false);
   const speechRecognitionRef = useRef<SpeechRecognition | null>(null);
-  const mcpEventSourceRef = useRef<EventSource | null>(null);
+
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const [userData, setUserData] = useState<Supplier[] | null>(null);
+  const [isDataLoading, setIsDataLoading] = useState(true);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -118,7 +85,26 @@ const DataViewPage: React.FC = () => {
 
   useEffect(scrollToBottom, [messages, selectableFiles]);
 
-  useEffect(() => () => mcpEventSourceRef.current?.close(), []);
+  useEffect(() => {
+    if (user && !isAuthLoading) {
+      setIsDataLoading(true);
+      setError(null);
+      const fetchData = async () => {
+        try {
+          const data = await getAllUserData(user.uid);
+          setUserData(data);
+        } catch (err) {
+          console.error("Errore nel caricamento dei dati utente:", err);
+          setError("Non è stato possibile caricare i dati dal database.");
+        } finally {
+          setIsDataLoading(false);
+        }
+      };
+      fetchData();
+    } else if (!isAuthLoading) {
+        setIsDataLoading(false);
+    }
+  }, [user, isAuthLoading]);
 
   useEffect(() => {
     const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -133,8 +119,6 @@ const DataViewPage: React.FC = () => {
       recognition.onerror = () => { setError("Errore durante il riconoscimento vocale."); setIsListening(false); };
       recognition.onend = () => { setIsListening(false); };
       speechRecognitionRef.current = recognition;
-    } else {
-      setIsSpeechRecognitionSupported(false);
     }
   }, []);
 
@@ -155,6 +139,12 @@ const DataViewPage: React.FC = () => {
     const userMessageText = messageOverride || input.trim();
     if ((!userMessageText && !attachedFile) || isLoading) return;
 
+    if (!user) {
+        setError("Devi effettuare il login per usare l'assistente.");
+        setMessages(prev => [...prev, { role: 'model', text: `Per favore, effettua il login per continuare.` }]);
+        return;
+    }
+
     let userMessageToDisplay = userMessageText;
     if (attachedFile) { userMessageToDisplay += `\n\n📄 File allegato: ${attachedFile.name}`; }
 
@@ -162,69 +152,51 @@ const DataViewPage: React.FC = () => {
 
     const fileToSend = attachedFile;
     setInput(''); setAttachedFile(null); setSelectableFiles(null); setIsLoading(true); setError(null);
-
-    // Tentativo risposta dai dati interni
-    const internal = matchInternalData(userMessageText);
-
-    if (internal) {
-      // Genera risposta da dati interni e aggiungi in chat
-      let responseText = '';
-      if (internal.type === 'product') {
-        responseText = `Scheda prodotto: ${internal.result.nome}\nAllergeni: ${internal.result.allergeni || 'N/D'}`;
-      } else if (internal.type === 'ddt') {
-        responseText = `DDT N°${internal.result.numero}: prodotti inclusi: ${internal.result.prodotti.map((p: any) => p.nome).join(', ')}`;
-      } else if (internal.type === 'supplier') {
-        responseText = `Fornitore: ${internal.result.ragioneSociale}\nCertificazioni: ${internal.result.certificazioni?.join(', ') || 'N/D'}`;
-      }
-      setMessages(prev => [...prev, { role: 'model', text: responseText }]);
-      setIsLoading(false);
-      return;
-    }
-
+    
     try {
-      const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+        const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+        const ai = new GoogleGenerativeAI(apiKey);
 
-      // Prompting potenziato
-      let fullPromptText = `RUOLO: SYD AGENT AI, copilota 4-in-1.
-CONTESTO: Hai accesso a questi dati interni:
-- Prodotti: ${JSON.stringify(PRODUCTS_DATA).slice(0, 16000) || 'N/D'}
-- DDT: ${JSON.stringify(DDT_DATA).slice(0, 12000) || 'N/D'}
-- Fornitori: ${JSON.stringify(SUPPLIERS_DATA).slice(0, 8000) || 'N/D'}
+        // --- MODIFICA CHIAVE: Corretto il nome dello strumento di ricerca ---
+        const tools: any[] = [{ 
+            google_search_retrieval: {}
+        }];
+
+        const model = ai.getGenerativeModel({
+            model: "gemini-1.5-flash-latest",
+            systemInstruction: `RUOLO: Sei SYD AGENT AI, un copilota intelligente per la piattaforma Celerya.
+CONTESTO: Stai assistendo l'utente con ID '${user.uid}'. Hai accesso in tempo reale a tutti i suoi dati salvati nel database.
 ISTRUZIONI:
-- Se puoi rispondere ai quesiti usando questi dati, fallo in modo sintetico e preciso.
-- Se la domanda riguarda file recenti, integrali nella risposta.
-- Se serve una ricerca online, usa la search Google e mostra le fonti consultate ai fini di massima trasparenza.
-- Se va preparata una comunicazione, una email o un paragrafo commerciale, basala sui dati sopra e su quanto fornito.
+- Usa i dati forniti nel CONTESTO DATI UTENTE come fonte primaria e veritiera per rispondere. Non inventare informazioni non presenti.
+- Se la domanda richiede informazioni non presenti nei dati, puoi usare lo strumento 'google_search_retrieval'. Cita sempre le fonti.
+- Sii conciso, professionale e vai dritto al punto.
 
-Domanda utente: ${userMessageText}`;
+CONTESTO DATI UTENTE:
+${userData ? JSON.stringify(userData, null, 2) : 'Nessun dato disponibile per questo utente.'}
+`,
+        });
 
-      const contents = { parts: [{ text: fullPromptText }] };
-      if (fileToSend) {
-        const { mimeType, data: base64Data } = await fileToBase64(fileToSend);
-        contents.parts.unshift({ inlineData: { mimeType, data: base64Data } });
-      }
+        const messageParts = [{ text: userMessageText }];
+        if (fileToSend) {
+            const { mimeType, data } = await fileToBase64(fileToSend);
+            messageParts.push({ inlineData: { mimeType, data } });
+        }
+        
+        const result = await model.generateContent({
+            contents: [{ role: 'user', parts: messageParts }],
+            tools: tools,
+        });
+        
+        const response = result.response;
+        const responseText = response.text();
+        const groundingAttributions = response.candidates?.[0]?.groundingMetadata?.groundingAttributions;
 
-      const retrievalTool = {
-        googleSearchRetrieval: {
-          dynamicRetrievalConfig: {
-            mode: DynamicRetrievalConfigMode.MODE_UNSPECIFIED,
-          },
-        },
-      };
+        const sources = groundingAttributions
+            ? groundingAttributions.map((att: any) => ({ uri: att.web?.uri, title: att.web?.title })).filter((s: any) => s.uri)
+            : [];
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: contents,
-        tools: [retrievalTool],
-      });
+        setMessages(prev => [...prev, { role: 'model', text: responseText, sources }]);
 
-      const responseText = response.text.trim();
-      const groundingAttributions = response.candidates?.[0]?.groundingMetadata?.groundingAttributions;
-      const sources = groundingAttributions
-        ? groundingAttributions.map(att => ({ uri: att.web?.uri, title: att.web?.title }))
-        : [];
-
-      setMessages(prev => [...prev, { role: 'model', text: responseText, sources }]);
     } catch (e) {
       console.error("SYD AGENT error:", e);
       const errorMessage = e instanceof Error ? e.message : "Oops! Qualcosa è andato storto.";
@@ -236,7 +208,6 @@ Domanda utente: ${userMessageText}`;
   };
 
   const handleFileSelection = (fileName: string) => {
-    if (mcpEventSourceRef.current) { mcpEventSourceRef.current.close(); }
     setSelectableFiles(null);
     handleSendMessage(`Analizza il file: "${fileName}"`);
   };
@@ -247,6 +218,8 @@ Domanda utente: ${userMessageText}`;
       handleSendMessage();
     }
   };
+
+  const isUIBlocked = isLoading || isAuthLoading || isDataLoading;
 
   return (
     <div className="flex flex-col h-full bg-gray-50">
@@ -271,6 +244,9 @@ Domanda utente: ${userMessageText}`;
                 </div>
               </div>
             )}
+            {(isAuthLoading || isDataLoading) && (
+                 <div className="flex justify-center text-sm text-gray-500">Caricamento dati utente...</div>
+            )}
             {selectableFiles && <McpFileSelector files={selectableFiles} onSelect={handleFileSelection} />}
             <div ref={messagesEndRef} />
           </div>
@@ -286,15 +262,15 @@ Domanda utente: ${userMessageText}`;
                 <PaperclipIcon className="w-5 h-5 text-gray-500 flex-shrink-0" />
                 <span className="text-sm text-gray-700 font-medium truncate">{attachedFile.name}</span>
               </div>
-              <button onClick={handleRemoveFile} className="p-1 rounded-full text-gray-500 hover:bg-gray-200"><XIcon className="w-4 h-4" /></button>
+              <button onClick={handleRemoveFile} className="p-1 rounded-full text-gray-500 hover:bg-gray-200"><TrashIcon className="w-4 h-4" /></button>
             </div>
           )}
           <div className="flex items-end gap-2">
-            <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" />
-            <button onClick={() => fileInputRef.current?.click()} disabled={isLoading} className="p-3 rounded-lg border bg-white hover:bg-gray-100 disabled:bg-gray-200"><PaperclipIcon className="w-5 h-5 text-gray-600" /></button>
-            <button onClick={handleListen} disabled={isLoading || !isSpeechRecognitionSupported} className={`p-3 rounded-lg border transition-colors ${isListening ? 'bg-red-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'} disabled:bg-gray-200`}><MicrophoneIcon className="w-5 h-5" /></button>
-            <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="Chiedi qualsiasi cosa: dati Celerya, file o web... (⌘+Enter)" rows={3} className="w-full flex-1 p-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-lime-500" disabled={isLoading} />
-            <button onClick={() => handleSendMessage()} disabled={isLoading || (!input.trim() && !attachedFile)} className="p-3 rounded-lg bg-lime-600 text-white hover:bg-lime-700 disabled:bg-gray-400"><SendIcon className="w-5 h-5" /></button>
+            <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" disabled={isUIBlocked}/>
+            <button onClick={() => fileInputRef.current?.click()} disabled={isUIBlocked} className="p-3 rounded-lg border bg-white hover:bg-gray-100 disabled:bg-gray-200"><PaperclipIcon className="w-5 h-5 text-gray-600" /></button>
+            <button onClick={handleListen} disabled={isUIBlocked || !isSpeechRecognitionSupported} className={`p-3 rounded-lg border transition-colors ${isListening ? 'bg-red-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'} disabled:bg-gray-200`}><MicrophoneIcon className="w-5 h-5" /></button>
+            <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder={isUIBlocked ? "Attendere caricamento dati..." : "Chiedi qualsiasi cosa... (⌘+Enter)"} rows={3} className="w-full flex-1 p-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-lime-500" disabled={isUIBlocked} />
+            <button onClick={() => handleSendMessage()} disabled={isUIBlocked || (!input.trim() && !attachedFile)} className="p-3 rounded-lg bg-lime-600 text-white hover:bg-lime-700 disabled:bg-gray-400"><SendIcon className="w-5 h-5" /></button>
           </div>
         </div>
       </footer>

@@ -1,13 +1,16 @@
+// vite.config.ts
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { nodePolyfills } from 'vite-plugin-node-polyfills'
+import path from 'path' // Importa il modulo 'path' di Node.js
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [
-    react(),
-    nodePolyfills({
-      protocolImports: true,
-    }),
-  ],
+  plugins: [react()],
+  // --- NUOVA CONFIGURAZIONE ---
+  // Aggiungi questa sezione 'resolve' per definire gli alias
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
 })
