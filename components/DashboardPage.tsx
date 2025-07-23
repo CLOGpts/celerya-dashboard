@@ -47,7 +47,7 @@ const DashboardPage: React.FC = () => {
         
         try {
             const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY as string);
-            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
             const customSchema = getCustomSchema();
             const prompt = generatePromptFromSchema(customSchema);
             const imagePart = { inlineData: { data: await fileToBase64(file), mimeType: file.type } };

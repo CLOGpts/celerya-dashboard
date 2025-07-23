@@ -1,0 +1,1 @@
+export const DDT_DATA = []; // array con DDT

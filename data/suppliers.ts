@@ -1,0 +1,1 @@
+export const SUPPLIERS_DATA = []; // array con fornitori
